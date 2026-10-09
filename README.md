@@ -52,6 +52,27 @@ Colab 中可以直接克隆代码与本次固定数据：
 !pip install -e '.[train]'
 ```
 
+部分 Colab 镜像预装的 `torchao==0.10.0` 与新版 PEFT 不兼容；若出现
+“only versions above 0.16.0 are supported”，先执行：
+
+```bash
+!pip uninstall -y torchao
+```
+
+小规模真实生成 rollout 实验（每步都把 LoRA、优化器状态、生成文本和指标
+保存到 Google Drive，可从 `checkpoints/step_XXXX` 恢复）：
+
+```bash
+!PYTHONPATH=src python scripts/hf_detectrlzh_microtrain.py \
+  --model Qwen/Qwen2.5-0.5B-Instruct \
+  --data data/detectrl_zh/train.json \
+  --output-dir /content/drive/MyDrive/GTA_AIGTD/runs/<RUN_ID>/microtrain_05b \
+  --device cuda --num-samples 8 --steps 4 --batch-size 2 --group-size 4
+```
+
+这个脚本用于验证真实策略采样、奖励差异、GTA 更新和断点恢复，不代表已得到
+可报告的 DetectRL-ZH 检测性能；正式结论仍需固定训练方案并在 dev/test 上评测。
+
 已有预测的官方分场景评测：
 
 ```bash
