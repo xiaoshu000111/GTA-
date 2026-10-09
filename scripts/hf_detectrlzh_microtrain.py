@@ -25,6 +25,7 @@ from gta_repro.detectrl_zh import (
     load_detectrl_json,
 )
 from gta_repro.rewards import score_completion
+from gta_repro.losses import masked_causal_ce
 from gta_repro.trainer import gta_optimizer_step
 
 
@@ -130,6 +131,55 @@ def _save_checkpoint(model, optimizer, output_dir, step, state):
     return checkpoint
 
 
+def _full_completion_sft_step(
+    model, tokenizer, optimizer, prompts, gold_labels, *, max_length
+):
+    """Teach the strict GTA envelope before sparse-reward rollout training.
+
+    This is a DetectRL-ZH cold-start adaptation, not an unreported claim about
+    the paper.  It supervises all canonical completion tokens so the model can
+    enter the reward-support region; GTA's normal supervised objective only
+    masks the Guess content and cannot by itself teach missing XML-like tags.
+    """
+
+    completions = [
+        (
+            f"<guess>{label}</guess>"
+            "<think>综合检查词汇分布、句式变化与上下文连贯性。</think>"
+            f"<answer>{label}</answer>"
+        )
+        for label in gold_labels
+    ]
+    normalized_prompts = [prompt if prompt[-1:].isspace() else prompt + "\n" for prompt in prompts]
+    texts = [prompt + completion for prompt, completion in zip(normalized_prompts, completions)]
+    prompt_lengths = [
+        len(tokenizer.encode(prompt, add_special_tokens=False)) for prompt in normalized_prompts
+    ]
+    batch = tokenizer(
+        texts,
+        add_special_tokens=False,
+        padding=True,
+        truncation=True,
+        max_length=max_length,
+        return_tensors="pt",
+    )
+    device = next(model.parameters()).device
+    batch = {key: value.to(device) for key, value in batch.items()}
+    completion_mask = torch.zeros_like(batch["input_ids"], dtype=torch.bool)
+    for row, prompt_length in enumerate(prompt_lengths):
+        active_length = int(batch["attention_mask"][row].sum().item())
+        completion_mask[row, prompt_length:active_length] = True
+    outputs = model(**batch)
+    loss = masked_causal_ce(outputs.logits, batch["input_ids"], completion_mask)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(
+        [parameter for parameter in model.parameters() if parameter.requires_grad], 1.0
+    )
+    optimizer.step()
+    return float(loss.detach().cpu())
+
+
 def main():
     parser = argparse.ArgumentParser(description="Resumable DetectRL-ZH GTA micro-training")
     parser.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
@@ -148,6 +198,8 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--lora-rank", type=int, default=2)
     parser.add_argument("--checkpoint-every", type=int, default=1)
+    parser.add_argument("--format-warmup-steps", type=int, default=0)
+    parser.add_argument("--warmup-learning-rate", type=float, default=2e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume-from")
     parser.add_argument("--no-reference", action="store_true")
@@ -183,10 +235,13 @@ def main():
     )
 
     start_step = 0
+    resume_state = None
     if args.resume_from:
         resume_dir = Path(args.resume_from)
-        state = json.loads((resume_dir / "trainer_state.json").read_text(encoding="utf-8"))
-        start_step = int(state["completed_steps"])
+        resume_state = json.loads(
+            (resume_dir / "trainer_state.json").read_text(encoding="utf-8")
+        )
+        start_step = int(resume_state["completed_steps"])
         optimizer.load_state_dict(
             torch.load(resume_dir / "optimizer.pt", map_location=device, weights_only=True)
         )
@@ -217,6 +272,53 @@ def main():
     (output_dir / "run_config.json").write_text(
         json.dumps(run_config, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+    warmup_completed = bool(
+        resume_state is not None and resume_state.get("format_warmup_completed")
+    )
+    if args.format_warmup_steps and not warmup_completed:
+        warmup_metrics_path = output_dir / "format_warmup_metrics.jsonl"
+        original_lrs = [group["lr"] for group in optimizer.param_groups]
+        for group in optimizer.param_groups:
+            group["lr"] = args.warmup_learning_rate
+        for warmup_step in range(args.format_warmup_steps):
+            offset = (warmup_step * args.batch_size) % len(records)
+            batch = [records[(offset + index) % len(records)] for index in range(args.batch_size)]
+            prompts = [
+                build_detectrl_prompt(record.text[: args.max_chars], tokenizer)
+                for record in batch
+            ]
+            gold_labels = [label_to_text(record.label) for record in batch]
+            loss = _full_completion_sft_step(
+                model,
+                tokenizer,
+                optimizer,
+                prompts,
+                gold_labels,
+                max_length=args.max_length,
+            )
+            warmup_metric = {"warmup_step": warmup_step + 1, "full_completion_sft_loss": loss}
+            with warmup_metrics_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(warmup_metric, ensure_ascii=False) + "\n")
+            print(json.dumps(warmup_metric, ensure_ascii=False), flush=True)
+        for group, learning_rate in zip(optimizer.param_groups, original_lrs):
+            group["lr"] = learning_rate
+        warmup_state = {
+            "completed_steps": 0,
+            "num_samples_consumed": 0,
+            "format_warmup_completed": True,
+            "format_warmup_steps": args.format_warmup_steps,
+        }
+        warmup_checkpoint = _save_checkpoint(
+            model, optimizer, output_dir, 0, warmup_state
+        )
+        print(
+            json.dumps(
+                {"format_warmup_completed": True, "checkpoint": str(warmup_checkpoint)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
 
     for step in range(start_step, args.steps):
         batch = records[step * args.batch_size : (step + 1) * args.batch_size]
@@ -279,6 +381,8 @@ def main():
         state = {
             "completed_steps": step + 1,
             "num_samples_consumed": (step + 1) * args.batch_size,
+            "format_warmup_completed": bool(args.format_warmup_steps) or warmup_completed,
+            "format_warmup_steps": args.format_warmup_steps,
             "last_metrics": stats,
         }
         if (step + 1) % args.checkpoint_every == 0 or step + 1 == args.steps:

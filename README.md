@@ -67,11 +67,14 @@ Colab 中可以直接克隆代码与本次固定数据：
   --model Qwen/Qwen2.5-0.5B-Instruct \
   --data data/detectrl_zh/train.json \
   --output-dir /content/drive/MyDrive/GTA_AIGTD/runs/<RUN_ID>/microtrain_05b \
-  --device cuda --num-samples 8 --steps 4 --batch-size 2 --group-size 4
+  --device cuda --num-samples 64 --steps 4 --batch-size 2 --group-size 4 \
+  --format-warmup-steps 32
 ```
 
 这个脚本用于验证真实策略采样、奖励差异、GTA 更新和断点恢复，不代表已得到
-可报告的 DetectRL-ZH 检测性能；正式结论仍需固定训练方案并在 dev/test 上评测。
+可报告的 DetectRL-ZH 检测性能。`--format-warmup-steps` 是为解决中文严格标签
+冷启动而增加的全 completion SFT 适配，并非论文已报告设置；正式结论仍需将其作为
+明确消融项，并在 dev/test 上评测。
 
 已有预测的官方分场景评测：
 
