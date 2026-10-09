@@ -41,8 +41,18 @@ def main() -> None:
     parser.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--data", help="official train.json; selects one sample per class")
     parser.add_argument("--max-chars", type=int, default=160)
+    parser.add_argument(
+        "--device",
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Torch device. Defaults to CUDA when available.",
+    )
     parser.add_argument("--local-files-only", action="store_true")
     args = parser.parse_args()
+
+    device = torch.device(args.device)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("--device cuda was requested but CUDA is unavailable")
+    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
 
     model_source = args.model
     if args.local_files_only:
@@ -55,7 +65,7 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(
         model_source,
         local_files_only=args.local_files_only,
-        dtype=torch.float32,
+        dtype=dtype,
         low_cpu_mem_usage=True,
     )
     model = get_peft_model(
@@ -68,6 +78,7 @@ def main() -> None:
             task_type="CAUSAL_LM",
         ),
     )
+    model.to(device)
     model.train()
     optimizer = torch.optim.SGD(
         [parameter for parameter in model.parameters() if parameter.requires_grad], lr=1e-5
@@ -99,6 +110,14 @@ def main() -> None:
     stats.update(
         {
             "task": "DetectRL-ZH document-level Human/Machine classification",
+            "device": str(device),
+            "dtype": str(dtype),
+            "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
+            "max_gpu_memory_gb": (
+                round(torch.cuda.max_memory_allocated(device) / 1024**3, 3)
+                if device.type == "cuda"
+                else None
+            ),
             "labels": {"0": "人类撰写", "1": "机器生成"},
             "n_prompts": len(prompts),
             "group_size": 2,
@@ -112,4 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
