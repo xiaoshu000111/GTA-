@@ -232,6 +232,9 @@ def main():
     optimizer = torch.optim.AdamW(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=args.learning_rate,
+        # Avoid parameter drift when sparse rewards make the RL gradient exactly
+        # zero.  Weight decay is not reported by the paper, so keep it explicit.
+        weight_decay=0.0,
     )
 
     start_step = 0
