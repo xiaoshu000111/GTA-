@@ -24,12 +24,32 @@ DetectRL-ZH 官方任务仓库：<https://github.com/NLP2CT/NLPCC-2025-Task1>
 
 详细映射与研究边界见 [DETECTRL_ZH_ADAPTATION.md](DETECTRL_ZH_ADAPTATION.md)。
 
+仓库内已固定本次可行性实验使用的数据副本：
+
+```text
+data/detectrl_zh/train.json
+data/detectrl_zh/dev.json
+data/detectrl_zh/test_with_label.json
+```
+
+来源、用途限制和 SHA-256 见 [data/detectrl_zh/README.md](data/detectrl_zh/README.md)。
+其中 `dev.json` 仅用于调参与模型选择，不能混入训练；`test_with_label.json`
+仅用于最终分析，不能参与优化或阈值选择。
+
 本地中文检测单步验证：
 
 ```bash
 PYTHONPATH=src python3 scripts/hf_detectrlzh_one_step.py \
   --local-files-only \
   --data /path/to/DetectRL-ZH/train.json
+```
+
+Colab 中可以直接克隆代码与本次固定数据：
+
+```bash
+!git clone https://github.com/xiaoshu000111/GTA-.git
+%cd GTA-
+!pip install -e '.[train]'
 ```
 
 已有预测的官方分场景评测：

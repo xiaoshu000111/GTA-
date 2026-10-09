@@ -25,7 +25,16 @@ tmp/
 paper_gta_emnlp2025.pdf
 
 # Datasets and model artifacts
-data/
+# Keep only the small, provenance-documented DetectRL-ZH JSON splits needed by
+# this reproduction. Other local datasets remain ignored.
+data/*
+!data/detectrl_zh/
+data/detectrl_zh/*
+!data/detectrl_zh/README.md
+!data/detectrl_zh/SHA256SUMS
+!data/detectrl_zh/train.json
+!data/detectrl_zh/dev.json
+!data/detectrl_zh/test_with_label.json
 datasets/
 checkpoints/
 models/
