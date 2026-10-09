@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+import sys
 
 from gta_repro.detectrl_zh import (
     build_detectrl_prompt,
@@ -11,6 +12,9 @@ from gta_repro.detectrl_zh import (
     summarize_records,
 )
 from gta_repro.evaluation import evaluate_detectrl_predictions
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from hf_detectrlzh_predict import _read_progress, _write_confusion_csv
 
 
 class DetectRLZHTests(unittest.TestCase):
@@ -57,7 +61,32 @@ class DetectRLZHTests(unittest.TestCase):
         self.assertEqual(main["Varying Lengths"]["n_examples"], 2)
         self.assertIsNotNone(result["subtask_results"]["avg_f1"])
 
+    def test_prediction_progress_alignment_and_confusion_csv(self):
+        rows = [
+            {"text": "人类甲", "label": 0, "id": 1},
+            {"text": "机器甲", "label": 1, "id": 2},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data_path = root / "data.json"
+            data_path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+            records = load_detectrl_json(str(data_path))
+            progress_path = root / "predictions.jsonl"
+            progress_path.write_text(
+                json.dumps(
+                    {"index": 0, "sample_id": 1, "label": 0, "prediction": 0},
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(len(_read_progress(progress_path, records)), 1)
+            csv_path = root / "confusion.csv"
+            _write_confusion_csv(csv_path, [[4, 1], [2, 3]])
+            csv_text = csv_path.read_text(encoding="utf-8")
+        self.assertIn("human_0,4,1", csv_text)
+        self.assertIn("machine_1,2,3", csv_text)
+
 
 if __name__ == "__main__":
     unittest.main()
-

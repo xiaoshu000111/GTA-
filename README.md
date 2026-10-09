@@ -88,6 +88,22 @@ PYTHONPATH=src python3 scripts/evaluate_detectrlzh.py \
 
 `result.json` 可以包含逐样本 `preds`，也可以包含 GTA `completions`；后一种情况会同时统计格式解析失败率。
 
+对 LoRA 检查点执行可断点续跑的全量生成评测（每个 batch 立即追加到
+`predictions.jsonl`，适合 Colab/Google Drive）：
+
+```bash
+PYTHONPATH=src python3 scripts/hf_detectrlzh_predict.py \
+  --model Qwen/Qwen2.5-3B-Instruct \
+  --adapter /content/drive/MyDrive/GTA_AIGTD/runs/<RUN_ID>/checkpoints/step_XXXX/adapter \
+  --data data/detectrl_zh/test_with_label.json \
+  --output-dir /content/drive/MyDrive/GTA_AIGTD/runs/<RUN_ID>/test_3b \
+  --device cuda --batch-size 8 --max-chars 512
+```
+
+输出包含整体及分场景 F1、`confusion_matrix.csv`、可直接阅读的 `REPORT.md`、
+逐样本原始 completion 和解析来源。使用 `--limit 100` 可先做显存与吞吐预检；
+正式测试不传 `--limit`。全量测试标签只能在训练配置和模型选择冻结后使用。
+
 ## 方法对应关系
 
 模型依次输出：
