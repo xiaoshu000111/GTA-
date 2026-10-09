@@ -29,15 +29,23 @@ from gta_repro.losses import masked_causal_ce
 from gta_repro.trainer import gta_optimizer_step
 
 
-def _balanced_subset(records, size, seed):
+def _training_subset(records, size, seed, strategy):
     if size < 2 or size % 2:
         raise ValueError("--num-samples must be an even integer >= 2")
+    if size > len(records):
+        raise ValueError("--num-samples exceeds the available training records")
+    rng = random.Random(seed)
+    if strategy == "raw":
+        subset = rng.sample(list(records), size)
+        rng.shuffle(subset)
+        return subset
+    if strategy != "balanced":
+        raise ValueError(f"unknown sampling strategy: {strategy}")
     human = [record for record in records if record.label == HUMAN_LABEL]
     machine = [record for record in records if record.label == MACHINE_LABEL]
     per_class = size // 2
     if len(human) < per_class or len(machine) < per_class:
         raise ValueError("requested subset is larger than one of the two classes")
-    rng = random.Random(seed)
     subset = rng.sample(human, per_class) + rng.sample(machine, per_class)
     rng.shuffle(subset)
     return subset
@@ -187,6 +195,12 @@ def main():
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--num-samples", type=int, default=8)
+    parser.add_argument(
+        "--sampling-strategy",
+        choices=("balanced", "raw"),
+        default="balanced",
+        help="balanced is the feasibility default; raw preserves the official train distribution",
+    )
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--group-size", type=int, default=4)
@@ -260,7 +274,12 @@ def main():
         for parameter in reference_model.parameters():
             parameter.requires_grad_(False)
 
-    records = _balanced_subset(load_detectrl_json(args.data), args.num_samples, args.seed)
+    records = _training_subset(
+        load_detectrl_json(args.data),
+        args.num_samples,
+        args.seed,
+        args.sampling_strategy,
+    )
     run_config = vars(args).copy()
     run_config.update(
         {

@@ -15,6 +15,7 @@ from gta_repro.evaluation import evaluate_detectrl_predictions
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from hf_detectrlzh_predict import _read_progress, _write_confusion_csv
+from hf_detectrlzh_microtrain import _training_subset
 
 
 class DetectRLZHTests(unittest.TestCase):
@@ -86,6 +87,21 @@ class DetectRLZHTests(unittest.TestCase):
             csv_text = csv_path.read_text(encoding="utf-8")
         self.assertIn("human_0,4,1", csv_text)
         self.assertIn("machine_1,2,3", csv_text)
+
+    def test_training_subset_can_preserve_raw_distribution(self):
+        rows = [
+            {"text": f"人类{index}", "label": 0} for index in range(2)
+        ] + [
+            {"text": f"机器{index}", "label": 1} for index in range(6)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "train.json"
+            path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+            records = load_detectrl_json(str(path))
+        raw = _training_subset(records, 8, 42, "raw")
+        balanced = _training_subset(records, 4, 42, "balanced")
+        self.assertEqual(sum(record.label == 1 for record in raw), 6)
+        self.assertEqual(sum(record.label == 1 for record in balanced), 2)
 
 
 if __name__ == "__main__":
