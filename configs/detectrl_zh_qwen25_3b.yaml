@@ -1,0 +1,47 @@
+task: detectrl_zh
+labels:
+  0: 人类撰写
+  1: 机器生成
+
+model_name: Qwen/Qwen2.5-3B-Instruct
+train_file: data/train.json
+dev_file: data/dev.json
+test_file: data/test_with_label.json
+
+# DetectRL-ZH training file is 3:1 machine:human. Preserve the official raw
+# distribution for the primary run; use a balanced run as a declared ablation.
+balance_strategy: none
+balanced_ablation_seed: 42
+
+# Values stated by the GTA paper.
+max_length: 4096
+precision: bfloat16
+per_device_batch_size: 4
+num_generations: 16
+reuse_factor: 4
+beta: 0.01
+lambda_sft: 1.0
+lambda_rl: 1.0
+epochs: 3
+
+# GTA paper does not report these values.
+learning_rate: 1.0e-6
+clip_epsilon: 0.2
+reference_update_steps: 100
+max_new_tokens: 256
+temperature: 1.0
+top_p: 1.0
+seed: 42
+
+primary_metric: detectrl_avg_f1
+report_slices:
+  - Normal
+  - Attack
+  - Attack-Mixed
+  - Attack-Paraphrase
+  - Attack-Perturbation
+  - Varying-64
+  - Varying-128
+  - Varying-256
+  - Varying-512
+

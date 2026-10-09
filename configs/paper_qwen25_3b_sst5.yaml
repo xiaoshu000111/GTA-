@@ -1,0 +1,23 @@
+# Values explicitly stated by the paper are marked PAPER.
+# Unreported values are marked ASSUMPTION and should be tuned/reported separately.
+model_name: Qwen/Qwen2.5-3B-Instruct          # PAPER
+dataset: sst5                                # PAPER
+max_length: 4096                             # PAPER
+precision: bfloat16                          # PAPER
+per_device_batch_size: 4                     # PAPER
+num_generations: 16                          # PAPER
+reuse_factor: 4                              # PAPER
+beta: 0.01                                   # PAPER
+lambda_sft: 1.0                              # PAPER
+lambda_rl: 1.0                               # PAPER
+epochs: 4                                    # PAPER says 3-4
+
+learning_rate: 1.0e-6                        # ASSUMPTION: not reported
+clip_epsilon: 0.2                            # ASSUMPTION: not reported
+reference_update_steps: 100                  # ASSUMPTION: not reported
+max_new_tokens: 256                          # ASSUMPTION: not reported
+temperature: 1.0                             # ASSUMPTION: not reported
+top_p: 1.0                                   # ASSUMPTION: not reported
+seed: 42                                     # ASSUMPTION: not reported
+use_lora: false                              # Paper appears to use full fine-tuning
+

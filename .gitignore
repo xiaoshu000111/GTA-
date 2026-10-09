@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local settings
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# IDE / operating system
+.DS_Store
+.idea/
+.vscode/
+
+# Local paper-analysis artifacts
+tmp/
+paper_gta_emnlp2025.pdf
+
+# Datasets and model artifacts
+data/
+datasets/
+checkpoints/
+models/
+wandb/
+runs/
+logs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Generated experiment outputs (keep committed reference JSON files)
+outputs/*
+!outputs/existing_gta_detectrl_metrics.json
+
+# Jupyter / Colab
+.ipynb_checkpoints/
